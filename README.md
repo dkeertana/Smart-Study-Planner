@@ -1,22 +1,37 @@
-# Smart Study Planner — Core Scheduler Backend
+# Smart Study Planner — Core Engine & Supporting Logic
 
-A deterministic, rule-based scheduling engine built for university students to automatically generate daily study timetables based on subject difficulty and exam dates.
+A deterministic, rule-based scheduling and adaptive rescheduling engine built for university students to automatically generate and adapt daily study timetables based on subject difficulty and exam dates.
 
 ---
 
-## 🧠 Scheduler Logic
+## 🧠 Core Features & Architecture
 
-The engine ranks study priorities using a simple rule-based formula:
+### 1. Primary Scheduler
+Ranks study priorities using a simple rule-based formula:
 
 $$\text{Priority} = \text{Difficulty} \times \text{Urgency}$$
 
 - **Urgency**: Calculated as $\text{Urgency} = \frac{1}{\text{Days Remaining} + 1}$.
   - Exam Today ($0$ days left) $\rightarrow$ $\text{Urgency} = 1.0$ (highest priority).
   - Exam Tomorrow ($1$ day left) $\rightarrow$ $\text{Urgency} = 0.5$.
-- **Difficulty**: Student rating from 1 (easiest) to 5 (hardest).
-- **Daily Capacity Constraint**: Total scheduled study hours on any single day **never** exceed the student's `available_hours_per_day`.
-- **Granular Allocation**: Allocates study time in clean, human-readable 0.5-hour increments.
+- **Difficulty**: Rating from 1 (easiest) to 5 (hardest).
+- **Daily Capacity Constraint**: Total scheduled study hours on any single day **never** exceed `available_hours_per_day`.
 - **Determinism**: Identical inputs always produce the exact same schedule with zero randomness.
+
+---
+
+### 2. Supporting Logic & Validation (`utils.py`)
+- **Input Validation**: `validate_subject_name`, `validate_difficulty` (1-5), `validate_available_hours` (>0), `validate_exam_date` (rejects past dates), and `validate_subjects` (prevents duplicate subject names).
+- **Date Utilities**: `days_until_exam(exam_date, today=None)` returns days remaining.
+- **Progress Tracking**: `calculate_progress(study_blocks)` returns total, completed, remaining hours, and progress percentage.
+
+---
+
+### 3. Adaptive Rescheduling (`reschedule_missed_tasks`)
+- **Missed Work Detection**: Identifies uncompleted study blocks whose scheduled date has passed (`block.date < today` and `completed == False`).
+- **Preserves Completed Work**: Completed tasks (`completed == True`) remain untouched on their original dates.
+- **Capacity & Exam Boundaries**: Redistributes missed hours into future daily available capacity up to the subject's exam date. Never schedules after an exam date or exceeds daily limits.
+- **Unallocated Work Reporting**: Reports any missed work that cannot fit before an exam date.
 
 ---
 
@@ -24,14 +39,15 @@ $$\text{Priority} = \text{Difficulty} \times \text{Urgency}$$
 
 ```text
 smart-study-planner/
-├── app.py                  # Streamlit UI integration stub
-├── scheduler.py            # Core scheduling engine
+├── app.py                  # Streamlit UI integration reference
+├── scheduler.py            # Core initial scheduling engine (Member A)
 ├── models.py               # Data models (Subject, StudyBlock)
-├── utils.py                # Input validation and date helpers
-├── requirements.txt        # Dependencies
-├── README.md               # Documentation
+├── utils.py                # Input validation, date helpers, progress, rescheduling
+├── requirements.txt        # Minimal dependencies
+├── README.md               # Project documentation
 └── tests/
-    └── test_scheduler.py   # Pytest test suite (9 tests)
+    ├── test_scheduler.py   # Scheduler tests (9 tests)
+    └── test_utils.py       # Supporting logic & integration tests (18 tests)
 ```
 
 ---
@@ -48,19 +64,34 @@ pip install -r requirements.txt
 pytest
 ```
 
-### 3. Usage Example for `app.py`
+---
+
+## 🔌 API Integration Contract
+
+### Validation & Initial Schedule Generation
 ```python
 from datetime import date, timedelta
 from models import Subject
 from scheduler import generate_schedule
+from utils import validate_subjects, calculate_progress, reschedule_missed_tasks
 
 subjects = [
-    Subject(name="Mathematics", exam_date=date.today() + timedelta(days=5), difficulty=5),
-    Subject(name="Physics", exam_date=date.today() + timedelta(days=8), difficulty=4),
+    Subject("Mathematics", date.today() + timedelta(days=5), 5),
+    Subject("Physics", date.today() + timedelta(days=8), 4),
 ]
 
-schedule = generate_schedule(subjects, available_hours_per_day=4.0)
+# 1. Validate inputs
+validated_subjects = validate_subjects(subjects)
 
-for block in schedule:
-    print(f"{block.date} | {block.subject}: {block.hours}h (Completed: {block.completed})")
+# 2. Generate initial schedule
+schedule = generate_schedule(validated_subjects, available_hours_per_day=4.0)
+
+# 3. Calculate progress
+progress = calculate_progress(schedule)
+print(f"Progress: {progress['progress_percentage']}%")
+
+# 4. Adaptively reschedule missed tasks
+result = reschedule_missed_tasks(schedule, available_hours_per_day=4.0, subjects=validated_subjects)
+updated_schedule = result["schedule"]
+print(f"Unallocated hours: {result['unallocated_hours']}h")
 ```
