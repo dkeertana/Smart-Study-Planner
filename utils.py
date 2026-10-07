@@ -121,9 +121,8 @@ def calculate_progress(study_blocks: list[StudyBlock]) -> dict:
     )
     remaining_hours = round(max(0.0, total_hours - completed_hours), 2)
 
-    progress_percentage = (
-        round((completed_hours / total_hours) * 100, 2) if total_hours > 0 else 0.0
-    )
+    raw_percentage = (completed_hours / total_hours) * 100 if total_hours > 0 else 0.0
+    progress_percentage = round(min(100.0, max(0.0, raw_percentage)), 2)
 
     return {
         "total_hours": total_hours,
@@ -134,10 +133,11 @@ def calculate_progress(study_blocks: list[StudyBlock]) -> dict:
 
 
 def calculate_daily_progress(
-    study_blocks: list[StudyBlock], target_date: date | None = None
+    study_blocks: list[StudyBlock] | None, target_date: date | str | None = None
 ) -> dict:
     """
     Calculate study progress metrics specifically for a single target date.
+    Reuses calculate_progress() on the filtered subset of blocks matching target_date.
     If target_date is None, date.today() is used.
 
     Returns:
@@ -149,10 +149,7 @@ def calculate_daily_progress(
             "has_tasks": bool
         }
     """
-    ref_date = target_date if target_date is not None else date.today()
-    day_blocks = [b for b in study_blocks if b.date == ref_date]
-
-    if not day_blocks:
+    if not study_blocks:
         return {
             "total_hours": 0.0,
             "completed_hours": 0.0,
@@ -161,20 +158,20 @@ def calculate_daily_progress(
             "has_tasks": False,
         }
 
-    total_hours = round(sum(b.hours for b in day_blocks), 2)
-    completed_hours = round(sum(b.hours for b in day_blocks if b.completed), 2)
-    remaining_hours = round(max(0.0, total_hours - completed_hours), 2)
-    progress_percentage = (
-        round((completed_hours / total_hours) * 100, 2) if total_hours > 0 else 0.0
-    )
+    ref_date = target_date if target_date is not None else date.today()
+    if isinstance(ref_date, str):
+        ref_date = date.fromisoformat(ref_date.strip())
 
-    return {
-        "total_hours": total_hours,
-        "completed_hours": completed_hours,
-        "remaining_hours": remaining_hours,
-        "progress_percentage": progress_percentage,
-        "has_tasks": True,
-    }
+    def _block_date_matches(block: StudyBlock) -> bool:
+        b_date = block.date
+        if isinstance(b_date, str):
+            b_date = date.fromisoformat(b_date.strip())
+        return b_date == ref_date
+
+    day_blocks = [b for b in study_blocks if _block_date_matches(b)]
+    progress = calculate_progress(day_blocks)
+    progress["has_tasks"] = len(day_blocks) > 0
+    return progress
 
 
 MOTIVATIONAL_MESSAGES = [

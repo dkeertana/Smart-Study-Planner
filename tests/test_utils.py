@@ -145,8 +145,108 @@ def test_calculate_progress_fully_completed():
     assert res["progress_percentage"] == 100.0
 
 
-def test_calculate_daily_progress_and_reset():
-    """Verify daily progress calculation and daily reset behavior."""
+def test_calculate_daily_progress_empty_schedule():
+    """Verify daily progress on empty schedule or None."""
+    res1 = calculate_daily_progress([])
+    assert res1 == {
+        "total_hours": 0.0,
+        "completed_hours": 0.0,
+        "remaining_hours": 0.0,
+        "progress_percentage": 0.0,
+        "has_tasks": False,
+    }
+
+    res2 = calculate_daily_progress(None, target_date=date.today())
+    assert res2 == {
+        "total_hours": 0.0,
+        "completed_hours": 0.0,
+        "remaining_hours": 0.0,
+        "progress_percentage": 0.0,
+        "has_tasks": False,
+    }
+
+
+def test_calculate_daily_progress_today():
+    """Verify default target_date behaves as today's date."""
+    today = date.today()
+    blocks = [
+        StudyBlock(today, "Math", 3.0, completed=True),
+        StudyBlock(today + timedelta(days=1), "Physics", 2.0, completed=False),
+    ]
+    res = calculate_daily_progress(blocks)  # No target_date passed, should default to today
+    assert res["total_hours"] == 3.0
+    assert res["completed_hours"] == 3.0
+    assert res["remaining_hours"] == 0.0
+    assert res["progress_percentage"] == 100.0
+    assert res["has_tasks"] is True
+
+
+def test_calculate_daily_progress_partially_completed():
+    """Verify daily progress on partially completed schedule."""
+    today = date.today()
+    blocks = [
+        StudyBlock(today, "Math", 2.0, completed=True),
+        StudyBlock(today, "Physics", 2.0, completed=False),
+    ]
+    res = calculate_daily_progress(blocks, target_date=today)
+    assert res["total_hours"] == 4.0
+    assert res["completed_hours"] == 2.0
+    assert res["remaining_hours"] == 2.0
+    assert res["progress_percentage"] == 50.0
+    assert res["has_tasks"] is True
+
+
+def test_calculate_daily_progress_fully_completed():
+    """Verify daily progress on fully completed schedule."""
+    target = date(2026, 10, 8)
+    blocks = [
+        StudyBlock(target, "Math", 2.5, completed=True),
+        StudyBlock(target, "Physics", 1.5, completed=True),
+    ]
+    res = calculate_daily_progress(blocks, target_date=target)
+    assert res["total_hours"] == 4.0
+    assert res["completed_hours"] == 4.0
+    assert res["remaining_hours"] == 0.0
+    assert res["progress_percentage"] == 100.0
+    assert res["has_tasks"] is True
+
+
+def test_calculate_daily_progress_multiple_dates():
+    """Verify calculate_daily_progress filters only the target date across multiple dates."""
+    day1 = date(2026, 10, 8)
+    day2 = date(2026, 10, 9)
+    day3 = date(2026, 10, 10)
+
+    blocks = [
+        StudyBlock(day1, "Math", 4.0, completed=True),
+        StudyBlock(day2, "Physics", 3.0, completed=True),
+        StudyBlock(day2, "Chemistry", 1.0, completed=False),
+        StudyBlock(day3, "Biology", 4.0, completed=False),
+    ]
+
+    res_day1 = calculate_daily_progress(blocks, target_date=day1)
+    assert res_day1["total_hours"] == 4.0
+    assert res_day1["completed_hours"] == 4.0
+    assert res_day1["progress_percentage"] == 100.0
+
+    res_day2 = calculate_daily_progress(blocks, target_date=day2)
+    assert res_day2["total_hours"] == 4.0
+    assert res_day2["completed_hours"] == 3.0
+    assert res_day2["remaining_hours"] == 1.0
+    assert res_day2["progress_percentage"] == 75.0
+
+    res_day3 = calculate_daily_progress(blocks, target_date=day3)
+    assert res_day3["total_hours"] == 4.0
+    assert res_day3["completed_hours"] == 0.0
+    assert res_day3["progress_percentage"] == 0.0
+
+
+def test_dual_progress_trackers_behavior():
+    """
+    Verify that Today's Progress and Overall Progress behave differently across days.
+    Day 1: 4h planned, 4h completed -> Today: 100%, Overall: 50%
+    Day 2: 4h planned, 0h completed -> Today: 0%, Overall: 50%
+    """
     day1 = date(2026, 10, 8)
     day2 = date(2026, 10, 9)
 
@@ -155,28 +255,27 @@ def test_calculate_daily_progress_and_reset():
         StudyBlock(day2, "Physics", 4.0, completed=False),
     ]
 
-    # Overall progress includes both day1 and day2 (4 / 8 = 50%)
-    overall = calculate_progress(blocks)
-    assert overall["completed_hours"] == 4.0
-    assert overall["total_hours"] == 8.0
-    assert overall["progress_percentage"] == 50.0
+    # Day 1 perspective
+    today_prog_day1 = calculate_daily_progress(blocks, target_date=day1)
+    overall_prog = calculate_progress(blocks)
 
-    # Day 1 daily progress is 100% (4 / 4h)
-    prog1 = calculate_daily_progress(blocks, target_date=day1)
-    assert prog1["has_tasks"] is True
-    assert prog1["progress_percentage"] == 100.0
-    assert prog1["completed_hours"] == 4.0
+    assert today_prog_day1["progress_percentage"] == 100.0
+    assert today_prog_day1["completed_hours"] == 4.0
+    assert today_prog_day1["total_hours"] == 4.0
 
-    # Day 2 daily progress starts at 0% (0 / 4h)
-    prog2 = calculate_daily_progress(blocks, target_date=day2)
-    assert prog2["has_tasks"] is True
-    assert prog2["progress_percentage"] == 0.0
-    assert prog2["completed_hours"] == 0.0
+    assert overall_prog["progress_percentage"] == 50.0
+    assert overall_prog["completed_hours"] == 4.0
+    assert overall_prog["total_hours"] == 8.0
 
-    # Day 3 (no tasks scheduled)
-    prog3 = calculate_daily_progress(blocks, target_date=date(2026, 10, 10))
-    assert prog3["has_tasks"] is False
-    assert prog3["progress_percentage"] == 0.0
+    # Day 2 perspective
+    today_prog_day2 = calculate_daily_progress(blocks, target_date=day2)
+    assert today_prog_day2["progress_percentage"] == 0.0
+    assert today_prog_day2["completed_hours"] == 0.0
+    assert today_prog_day2["total_hours"] == 4.0
+
+    # Overall progress still includes Day 1's completed 4 hours
+    assert overall_prog["completed_hours"] == 4.0
+    assert overall_prog["progress_percentage"] == 50.0
 
 
 def test_motivational_messages():
