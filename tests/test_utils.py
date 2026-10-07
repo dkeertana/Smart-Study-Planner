@@ -12,6 +12,8 @@ from utils import (
     validate_subjects,
     days_until_exam,
     calculate_progress,
+    calculate_daily_progress,
+    get_motivational_message,
     reschedule_missed_tasks,
 )
 
@@ -91,7 +93,7 @@ def test_days_until_exam():
 
 
 # =====================================================================
-# 3. PROGRESS CALCULATION TESTS
+# 3. PROGRESS CALCULATION & DUAL TRACKING TESTS
 # =====================================================================
 
 def test_calculate_progress_empty():
@@ -141,6 +143,53 @@ def test_calculate_progress_fully_completed():
     assert res["completed_hours"] == 10.0
     assert res["remaining_hours"] == 0.0
     assert res["progress_percentage"] == 100.0
+
+
+def test_calculate_daily_progress_and_reset():
+    """Verify daily progress calculation and daily reset behavior."""
+    day1 = date(2026, 10, 8)
+    day2 = date(2026, 10, 9)
+
+    blocks = [
+        StudyBlock(day1, "Math", 4.0, completed=True),
+        StudyBlock(day2, "Physics", 4.0, completed=False),
+    ]
+
+    # Overall progress includes both day1 and day2 (4 / 8 = 50%)
+    overall = calculate_progress(blocks)
+    assert overall["completed_hours"] == 4.0
+    assert overall["total_hours"] == 8.0
+    assert overall["progress_percentage"] == 50.0
+
+    # Day 1 daily progress is 100% (4 / 4h)
+    prog1 = calculate_daily_progress(blocks, target_date=day1)
+    assert prog1["has_tasks"] is True
+    assert prog1["progress_percentage"] == 100.0
+    assert prog1["completed_hours"] == 4.0
+
+    # Day 2 daily progress starts at 0% (0 / 4h)
+    prog2 = calculate_daily_progress(blocks, target_date=day2)
+    assert prog2["has_tasks"] is True
+    assert prog2["progress_percentage"] == 0.0
+    assert prog2["completed_hours"] == 0.0
+
+    # Day 3 (no tasks scheduled)
+    prog3 = calculate_daily_progress(blocks, target_date=date(2026, 10, 10))
+    assert prog3["has_tasks"] is False
+    assert prog3["progress_percentage"] == 0.0
+
+
+def test_motivational_messages():
+    """Verify motivational message selection."""
+    msg1 = get_motivational_message(completed_count=1)
+    assert isinstance(msg1, str)
+    assert len(msg1) > 0
+
+    msg_daily = get_motivational_message(completed_count=2, daily_completed=True)
+    assert "Daily goal completed" in msg_daily
+
+    msg_milestone = get_motivational_message(completed_count=3, overall_progress=50.0)
+    assert "50% Complete" in msg_milestone
 
 
 # =====================================================================

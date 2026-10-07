@@ -10,6 +10,8 @@ from utils import (
     validate_subjects,
     days_until_exam,
     calculate_progress,
+    calculate_daily_progress,
+    get_motivational_message,
     reschedule_missed_tasks,
 )
 
@@ -22,6 +24,10 @@ def init_session_state():
         st.session_state["schedule"] = []
     if "available_hours" not in st.session_state:
         st.session_state["available_hours"] = 4.0
+    if "prev_completed_hours" not in st.session_state:
+        st.session_state["prev_completed_hours"] = 0.0
+    if "motivational_message" not in st.session_state:
+        st.session_state["motivational_message"] = None
 
 
 def load_demo_data():
@@ -34,6 +40,8 @@ def load_demo_data():
     ]
     st.session_state["available_hours"] = 4.0
     st.session_state["schedule"] = []
+    st.session_state["prev_completed_hours"] = 0.0
+    st.session_state["motivational_message"] = None
     st.success("Loaded demo data! Set your daily hours below and click 'Generate Study Plan'.")
 
 
@@ -111,6 +119,8 @@ def main():
                 if st.button("🗑️", key=f"del_{idx}", help=f"Remove {subj.name}"):
                     st.session_state["subjects"].pop(idx)
                     st.session_state["schedule"] = []
+                    st.session_state["prev_completed_hours"] = 0.0
+                    st.session_state["motivational_message"] = None
                     st.rerun()
     else:
         st.info("No subjects added yet. Add a subject above or click '⚡ Load Demo Data'.")
@@ -151,6 +161,8 @@ def main():
                     st.warning("No future study blocks could be scheduled for the given subjects.")
                 else:
                     st.session_state["schedule"] = schedule
+                    st.session_state["prev_completed_hours"] = 0.0
+                    st.session_state["motivational_message"] = None
                     st.success(f"Successfully generated timetable with {len(schedule)} study blocks!")
                     st.rerun()
         except ValueError as err:
@@ -162,8 +174,34 @@ def main():
         st.markdown("---")
         st.header("3. Your Personal Study Plan & Dashboard")
 
+        # Check for progress completion events
+        current_completed = round(sum(b.hours for b in schedule if b.completed), 2)
+        prev_completed = st.session_state.get("prev_completed_hours", 0.0)
+
+        daily_info = calculate_daily_progress(schedule, target_date=date.today())
+        overall_info = calculate_progress(schedule)
+
+        if current_completed > prev_completed:
+            # Progress increased -> Trigger motivational message
+            completed_count = sum(1 for b in schedule if b.completed)
+            daily_done = daily_info["has_tasks"] and (daily_info["progress_percentage"] >= 100.0)
+            msg = get_motivational_message(
+                completed_count,
+                daily_completed=daily_done,
+                overall_progress=overall_info["progress_percentage"],
+            )
+            st.session_state["motivational_message"] = msg
+            st.session_state["prev_completed_hours"] = current_completed
+        elif current_completed < prev_completed:
+            # User unchecked a block -> clear positive message
+            st.session_state["motivational_message"] = None
+            st.session_state["prev_completed_hours"] = current_completed
+
+        # Display Motivational Message if present
+        if st.session_state.get("motivational_message"):
+            st.success(st.session_state["motivational_message"])
+
         # Summary Metrics
-        progress_info = calculate_progress(schedule)
         nearest_exam_subj = min(st.session_state["subjects"], key=lambda s: s.exam_date) if st.session_state["subjects"] else None
         nearest_days = days_until_exam(nearest_exam_subj.exam_date) if nearest_exam_subj else 0
 
@@ -174,16 +212,36 @@ def main():
             f"{nearest_exam_subj.name if nearest_exam_subj else 'N/A'}",
             f"{nearest_days} days left" if nearest_exam_subj else "",
         )
-        col_m3.metric("Planned Study Hours", f"{progress_info['total_hours']}h")
-        col_m4.metric("Overall Progress", f"{progress_info['progress_percentage']}%")
+        col_m3.metric("Planned Study Hours", f"{overall_info['total_hours']}h")
+        col_m4.metric("Overall Progress", f"{overall_info['progress_percentage']}%")
 
-        st.subheader("Progress Tracker")
-        st.progress(min(1.0, max(0.0, progress_info["progress_percentage"] / 100.0)))
-        st.caption(
-            f"Completed: **{progress_info['completed_hours']}h** | "
-            f"Remaining: **{progress_info['remaining_hours']}h** | "
-            f"Total: **{progress_info['total_hours']}h**"
-        )
+        st.markdown("---")
+
+        # DUAL PROGRESS TRACKERS
+        st.subheader("📊 Dual Progress Tracking")
+
+        col_p1, col_p2 = st.columns(2)
+
+        with col_p1:
+            st.markdown(f"### 📅 Today's Progress ({date.today().strftime('%b %d, %Y')})")
+            if not daily_info["has_tasks"]:
+                st.info("No study tasks scheduled for today.")
+                st.progress(0.0)
+                st.caption("0 / 0 hours scheduled today")
+            else:
+                st.progress(min(1.0, max(0.0, daily_info["progress_percentage"] / 100.0)))
+                st.markdown(
+                    f"**{daily_info['progress_percentage']}%** "
+                    f"({daily_info['completed_hours']} / {daily_info['total_hours']} hours completed today)"
+                )
+
+        with col_p2:
+            st.markdown("### 🌐 Overall Progress")
+            st.progress(min(1.0, max(0.0, overall_info["progress_percentage"] / 100.0)))
+            st.markdown(
+                f"**{overall_info['progress_percentage']}%** "
+                f"({overall_info['completed_hours']} / {overall_info['total_hours']} hours completed overall)"
+            )
 
         st.markdown("---")
 

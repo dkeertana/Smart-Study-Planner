@@ -1,4 +1,4 @@
-# Smart Study Planner — Core Engine & Supporting Logic
+# Smart Study Planner — Core Engine, Supporting Logic & UI
 
 A deterministic, rule-based scheduling and adaptive rescheduling engine built for university students to automatically generate and adapt daily study timetables based on subject difficulty and exam dates.
 
@@ -23,7 +23,10 @@ $$\text{Priority} = \text{Difficulty} \times \text{Urgency}$$
 ### 2. Supporting Logic & Validation (`utils.py`)
 - **Input Validation**: `validate_subject_name`, `validate_difficulty` (1-5), `validate_available_hours` (>0), `validate_exam_date` (rejects past dates), and `validate_subjects` (prevents duplicate subject names).
 - **Date Utilities**: `days_until_exam(exam_date, today=None)` returns days remaining.
-- **Progress Tracking**: `calculate_progress(study_blocks)` returns total, completed, remaining hours, and progress percentage.
+- **Dual Progress Tracking**: 
+  - `calculate_daily_progress(schedule, target_date)`: Tracks today's tasks specifically ($\text{Today's Completed} / \text{Today's Planned} \times 100$). Naturally resets on a new date.
+  - `calculate_progress(schedule)`: Tracks overall plan progress ($\text{Total Completed} / \text{Total Planned} \times 100$). Retains all past completed work across days.
+- **Motivational Completion Feedback**: `get_motivational_message(completed_count, daily_completed, overall_progress)` triggers encouraging messages on genuine task completion without spamming on reruns.
 
 ---
 
@@ -39,7 +42,7 @@ $$\text{Priority} = \text{Difficulty} \times \text{Urgency}$$
 
 ```text
 smart-study-planner/
-├── app.py                  # Streamlit UI integration reference
+├── app.py                  # Streamlit UI integration reference & dual tracking
 ├── scheduler.py            # Core initial scheduling engine (Member A)
 ├── models.py               # Data models (Subject, StudyBlock)
 ├── utils.py                # Input validation, date helpers, progress, rescheduling
@@ -47,7 +50,7 @@ smart-study-planner/
 ├── README.md               # Project documentation
 └── tests/
     ├── test_scheduler.py   # Scheduler tests (9 tests)
-    └── test_utils.py       # Supporting logic & integration tests (18 tests)
+    └── test_utils.py       # Supporting logic, progress, rescheduling tests (20 tests)
 ```
 
 ---
@@ -73,30 +76,40 @@ pytest
 
 ## 🔌 API Integration Contract
 
-### Validation & Initial Schedule Generation
+### Dual Progress & Motivational Feedback Example
 ```python
 from datetime import date, timedelta
 from models import Subject
 from scheduler import generate_schedule
-from utils import validate_subjects, calculate_progress, reschedule_missed_tasks
+from utils import (
+    validate_subjects,
+    calculate_progress,
+    calculate_daily_progress,
+    get_motivational_message,
+    reschedule_missed_tasks,
+)
 
 subjects = [
     Subject("Mathematics", date.today() + timedelta(days=5), 5),
     Subject("Physics", date.today() + timedelta(days=8), 4),
 ]
 
-# 1. Validate inputs
+# 1. Validate inputs & generate schedule
 validated_subjects = validate_subjects(subjects)
-
-# 2. Generate initial schedule
 schedule = generate_schedule(validated_subjects, available_hours_per_day=4.0)
 
-# 3. Calculate progress
-progress = calculate_progress(schedule)
-print(f"Progress: {progress['progress_percentage']}%")
+# 2. Calculate Dual Progress Trackers
+today_prog = calculate_daily_progress(schedule, target_date=date.today())
+overall_prog = calculate_progress(schedule)
 
-# 4. Adaptively reschedule missed tasks
-result = reschedule_missed_tasks(schedule, available_hours_per_day=4.0, subjects=validated_subjects)
-updated_schedule = result["schedule"]
-print(f"Unallocated hours: {result['unallocated_hours']}h")
+print(f"Today's Progress: {today_prog['progress_percentage']}%")
+print(f"Overall Progress: {overall_prog['progress_percentage']}%")
+
+# 3. Motivational message on completion
+message = get_motivational_message(
+    completed_count=1,
+    daily_completed=today_prog["progress_percentage"] >= 100.0,
+    overall_progress=overall_prog["progress_percentage"],
+)
+print(f"Feedback: {message}")
 ```

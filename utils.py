@@ -133,6 +133,88 @@ def calculate_progress(study_blocks: list[StudyBlock]) -> dict:
     }
 
 
+def calculate_daily_progress(
+    study_blocks: list[StudyBlock], target_date: date | None = None
+) -> dict:
+    """
+    Calculate study progress metrics specifically for a single target date.
+    If target_date is None, date.today() is used.
+
+    Returns:
+        dict: {
+            "total_hours": float,
+            "completed_hours": float,
+            "remaining_hours": float,
+            "progress_percentage": float,
+            "has_tasks": bool
+        }
+    """
+    ref_date = target_date if target_date is not None else date.today()
+    day_blocks = [b for b in study_blocks if b.date == ref_date]
+
+    if not day_blocks:
+        return {
+            "total_hours": 0.0,
+            "completed_hours": 0.0,
+            "remaining_hours": 0.0,
+            "progress_percentage": 0.0,
+            "has_tasks": False,
+        }
+
+    total_hours = round(sum(b.hours for b in day_blocks), 2)
+    completed_hours = round(sum(b.hours for b in day_blocks if b.completed), 2)
+    remaining_hours = round(max(0.0, total_hours - completed_hours), 2)
+    progress_percentage = (
+        round((completed_hours / total_hours) * 100, 2) if total_hours > 0 else 0.0
+    )
+
+    return {
+        "total_hours": total_hours,
+        "completed_hours": completed_hours,
+        "remaining_hours": remaining_hours,
+        "progress_percentage": progress_percentage,
+        "has_tasks": True,
+    }
+
+
+MOTIVATIONAL_MESSAGES = [
+    "🎉 Great job! You completed another study session.",
+    "💪 Keep going! You're making progress.",
+    "🔥 Nice work! One step closer to your exam goal.",
+    "✨ Great progress! Keep the momentum going.",
+    "📚 Well done! Your preparation is getting stronger.",
+    "🚀 You're on a roll! Keep it up.",
+    "🎯 Another task completed. Stay focused!",
+]
+
+
+def get_motivational_message(
+    completed_count: int,
+    daily_completed: bool = False,
+    overall_progress: float = 0.0,
+) -> str:
+    """
+    Return a motivational feedback message when progress is made.
+    """
+    if daily_completed:
+        return "🏆 Daily goal completed! Amazing work today."
+
+    if overall_progress >= 100.0:
+        return "🎓 100% Complete — Study plan finished! Outstanding effort!"
+    elif overall_progress >= 75.0:
+        return "🚀 75% Complete — The finish line is close! Keep pushing!"
+    elif overall_progress >= 50.0:
+        return "🔥 50% Complete — Halfway there! Excellent momentum!"
+    elif overall_progress >= 25.0:
+        return "🌱 25% Complete — Building strong revision habits!"
+
+    if completed_count <= 0:
+        return MOTIVATIONAL_MESSAGES[0]
+
+    idx = (completed_count - 1) % len(MOTIVATIONAL_MESSAGES)
+    return MOTIVATIONAL_MESSAGES[idx]
+
+
 def reschedule_missed_tasks(
     study_blocks: list[StudyBlock],
     available_hours_per_day: float,
