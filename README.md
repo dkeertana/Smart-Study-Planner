@@ -59,7 +59,12 @@ smart-study-planner/
 pip install -r requirements.txt
 ```
 
-### 2. Run Test Suite
+### 2. Run Streamlit Application
+```bash
+streamlit run app.py
+```
+
+### 3. Run Test Suite
 ```bash
 pytest
 ```
