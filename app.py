@@ -34,7 +34,7 @@ def load_demo_data():
     ]
     st.session_state["available_hours"] = 4.0
     st.session_state["schedule"] = []
-    st.success("Loaded demo data! Click 'Generate Study Plan' below to start.")
+    st.success("Loaded demo data! Set your daily hours below and click 'Generate Study Plan'.")
 
 
 def main():
@@ -42,7 +42,7 @@ def main():
         page_title="Smart Study Planner",
         page_icon="📚",
         layout="wide",
-        initial_sidebar_state="expanded",
+        initial_sidebar_state="collapsed",
     )
 
     init_session_state()
@@ -58,18 +58,6 @@ def main():
             load_demo_data()
 
     st.markdown("---")
-
-    # --- Sidebar Configuration ---
-    st.sidebar.header("⚙️ Configuration")
-    available_hours = st.sidebar.number_input(
-        "Available Study Hours / Day",
-        min_value=0.5,
-        max_value=24.0,
-        value=float(st.session_state["available_hours"]),
-        step=0.5,
-        help="Maximum hours you can dedicate to studying each day.",
-    )
-    st.session_state["available_hours"] = available_hours
 
     # --- Section 1: Subject Entry ---
     st.header("1. Subjects & Exams")
@@ -129,10 +117,27 @@ def main():
 
     st.markdown("---")
 
-    # --- Section 2: Timetable Generation ---
-    st.header("2. Timetable Generation")
+    # --- Section 2: Daily Study Hours & Timetable Generation ---
+    st.header("2. Daily Study Capacity & Timetable Generation")
 
-    if st.button("🚀 Generate Study Plan", type="primary"):
+    col_h1, col_h2 = st.columns([2, 3])
+    with col_h1:
+        available_hours = st.number_input(
+            "⏱️ Available Study Hours per Day",
+            min_value=0.5,
+            max_value=24.0,
+            value=float(st.session_state["available_hours"]),
+            step=0.5,
+            help="Enter how many hours you can realistically study each day.",
+        )
+        st.session_state["available_hours"] = available_hours
+
+    with col_h2:
+        st.write("")
+        st.write("")
+        gen_clicked = st.button("🚀 Generate Study Plan", type="primary", use_container_width=True)
+
+    if gen_clicked:
         try:
             if not st.session_state["subjects"]:
                 st.error("Please add at least one subject before generating a study plan.")
